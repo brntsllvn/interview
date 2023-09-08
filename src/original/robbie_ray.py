@@ -7,9 +7,12 @@ from pybaseball import playerid_lookup, statcast_pitcher
 player_id = 592662
 ray_stats = statcast_pitcher('2021-03-01', '2022-11-01', player_id)
 ray_stats['year'] = pd.to_datetime(ray_stats['game_date']).dt.year
+ray_stats.to_csv('ray.csv')
+print("break")
 
 # Filter out rows without pitch_type and 'estimated_woba_using_speedangle'
-ray_stats = ray_stats.dropna(subset=['pitch_type', 'estimated_woba_using_speedangle'])
+# ray_stats = ray_stats.dropna(subset=['pitch_type', 'estimated_woba_using_speedangle'])
+ray_stats = ray_stats.dropna(subset=['pitch_type'])
 
 # Features and stats
 features = ['release_speed', 'release_spin_rate', 'pfx_x', 'pfx_z', 'plate_x', 'plate_z']
