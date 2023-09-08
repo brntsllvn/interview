@@ -8,34 +8,47 @@ player_id = 592662
 ray_stats = statcast_pitcher('2021-03-01', '2022-11-01', player_id)
 ray_stats['year'] = pd.to_datetime(ray_stats['game_date']).dt.year
 
+# Filter out rows without pitch_type and 'estimated_woba_using_speedangle'
+ray_stats = ray_stats.dropna(subset=['pitch_type', 'estimated_woba_using_speedangle'])
+
 # Features and stats
 features = ['release_speed', 'release_spin_rate', 'pfx_x', 'pfx_z', 'plate_x', 'plate_z']
-pitch_types = ray_stats['pitch_type'].dropna().unique()
+pitch_types = ray_stats['pitch_type'].unique()
 
 # Frequency Data
 pitch_frequency = ray_stats.groupby(['year', 'pitch_type']).size().reset_index(name='count')
 total_pitches = pitch_frequency.groupby('year')['count'].transform('sum')
 pitch_frequency['percent'] = (pitch_frequency['count'] / total_pitches) * 100
 
-# Page 1: Frequency Table
+# wOBA calculations
+woba_data = ray_stats.groupby(['year', 'pitch_type'])['estimated_woba_using_speedangle'].mean().reset_index()
+woba_pivot = woba_data.pivot(index='pitch_type', columns='year',
+                             values='estimated_woba_using_speedangle').fillna(0).round(3)
+
+# Merge frequency and wOBA
+merged_data = pd.merge(pitch_frequency, woba_data, how='outer', on=['year', 'pitch_type'])
+merged_pivot = merged_data.pivot(index='pitch_type', columns='year', values=[
+                                 'count', 'percent', 'estimated_woba_using_speedangle']).fillna(0)
+
+# Page 1: Frequency Table + wOBA
 fig1 = plt.figure(figsize=(11, 8.5))
 ax1 = fig1.add_subplot(111)
 ax1.axis('tight')
 ax1.axis('off')
 
-# Create a Pivot Table
-freq_table = pitch_frequency.pivot(index='pitch_type', columns='year', values=['count', 'percent']).fillna(0)
-
-# Calculate Differences
-freq_table[('count', 'diff')] = freq_table[('count', 2022)] - freq_table[('count', 2021)]
-freq_table[('percent', 'diff')] = freq_table[('percent', 2022)] - freq_table[('percent', 2021)]
+# Calculate Differences for Count and Percent
+merged_pivot[('count', 'diff')] = merged_pivot[('count', 2022)] - merged_pivot[('count', 2021)]
+merged_pivot[('percent', 'diff')] = merged_pivot[('percent', 2022)] - merged_pivot[('percent', 2021)]
 
 # Reorder and Format
-freq_table = freq_table[[('count', 2021), ('count', 2022), ('count', 'diff'), ('percent', 2021),
-                         ('percent', 2022), ('percent', 'diff')]].round(0).astype(int)
+final_table = merged_pivot[[('count', 2021), ('count', 2022), ('count', 'diff'), ('percent', 2021),
+                            ('percent', 2022), ('percent', 'diff'), ('estimated_woba_using_speedangle', 2021),
+                            ('estimated_woba_using_speedangle', 2022)]].round({'count': 0, 'percent': 0, 'estimated_woba_using_speedangle': 3}).astype({'count': int, 'percent': int})
 
-ax1.table(cellText=freq_table.values, colLabels=freq_table.columns, rowLabels=freq_table.index, loc='center')
-plt.savefig('FrequencyTable.png')
+ax1.table(cellText=final_table.values, colLabels=final_table.columns,
+          rowLabels=final_table.index, loc='center', fontsize=100)
+# plt.savefig('FrequencyTable_WOBA.png')
+final_table.to_csv('FrequencyTable_WOBA.csv')
 
 for feature in features:
     fig = plt.figure(figsize=(16, 9))
